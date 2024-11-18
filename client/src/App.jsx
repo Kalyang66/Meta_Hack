@@ -1,6 +1,5 @@
-// App.jsx
 import React, { useState, useEffect } from 'react';
-import { Card, Container, Table, Row, Col, Spinner } from 'react-bootstrap';
+import { Card, Container, Table, Row, Col, Spinner, Modal, Button, Form, Alert } from 'react-bootstrap';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -14,7 +13,6 @@ import {
 import { Line } from 'react-chartjs-2';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
-// Register ChartJS components
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -29,11 +27,17 @@ function App() {
   const [healthData, setHealthData] = useState(null);
   const [trafficData, setTrafficData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [modalShow, setModalShow] = useState(false);
+  const [selectedService, setSelectedService] = useState(null);
+  const [hwAcceleration, setHwAcceleration] = useState({});
+  const [qosOptimization, setQosOptimization] = useState({});
+  const [resetting, setResetting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState(null);
 
   const services = ['Facebook', 'Instagram', 'WhatsApp', 'Messenger', 'Workplace', 'Quest Store'];
   const regions = ['NA-East', 'NA-West', 'EU-Central', 'EU-West', 'APAC', 'LATAM'];
 
-  // Generate mock traffic data
+  // Rest of your existing data generation functions...
   const generateTrafficData = () => {
     const times = Array.from({ length: 24 }, (_, i) => `${i}:00`);
     return {
@@ -61,13 +65,44 @@ function App() {
     };
   };
 
-  // Generate health data
   const generateHealthData = () => {
     const data = {};
+    const TARGET_TRAFFIC = 1500;
+    const TARGET_LATENCY = 70;
+    const TARGET_ERROR_RATE = 2;
+    const TARGET_NODES = 175;
+
     services.forEach(service => {
       data[service] = {};
       regions.forEach(region => {
-        data[service][region] = 85 + Math.random() * 15;
+        const serviceKey = `${service}-${region}`;
+        const accelerationFactor = hwAcceleration[serviceKey] ? 0.8 : 1;
+        const qosFactor = qosOptimization[serviceKey] ? 0.9 : 1;
+
+        const traffic = Math.random() * 1000 + 500;
+        const latency = (Math.random() * 20 + 50) * accelerationFactor * qosFactor;
+        const errorRate = (Math.random() * 1 + 1) * qosFactor;
+        const activeNodes = Math.floor(Math.random() * 100 + 75);
+        
+        const trafficScore = Math.min(100, (traffic / TARGET_TRAFFIC) * 0.85861477);
+        const latencyScore = Math.min(100, ((TARGET_LATENCY - latency) / TARGET_LATENCY) * 0.04006869);
+        const errorScore = Math.min(100, ((TARGET_ERROR_RATE - errorRate) / TARGET_ERROR_RATE) * 0.00114482);
+        const nodeScore = Math.min(100, (activeNodes / TARGET_NODES) * 0.10017172);
+        
+        const healthScore = Math.min(100, (
+          trafficScore +
+          latencyScore +
+          errorScore +
+          nodeScore
+        ) * 100);
+
+        data[service][region] = {
+          healthScore,
+          traffic,
+          latency,
+          errorRate,
+          activeNodes
+        };
       });
     });
     return data;
@@ -83,16 +118,61 @@ function App() {
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [hwAcceleration, qosOptimization]);
 
   const getHealthColor = (score) => {
-    if (score >= 95) return 'success';
-    if (score >= 90) return 'info';
-    if (score >= 85) return 'warning';
+    if (score >= 50) return 'success';
+    if (score >= 40) return 'info';
+    if (score >= 35) return 'warning';
     return 'danger';
   };
 
-  // Chart options
+  const handleShowDetails = (service, region) => {
+    setSelectedService({ service, region, ...healthData[service][region] });
+    setModalShow(true);
+  };
+
+  const toggleHwAcceleration = () => {
+    const serviceKey = `${selectedService.service}-${selectedService.region}`;
+    setHwAcceleration(prev => ({
+      ...prev,
+      [serviceKey]: !prev[serviceKey]
+    }));
+    setStatusMessage({
+      type: 'info',
+      text: `Hardware acceleration ${!hwAcceleration[serviceKey] ? 'enabled' : 'disabled'} for ${selectedService.service} in ${selectedService.region}`
+    });
+  };
+
+  const toggleQosOptimization = () => {
+    const serviceKey = `${selectedService.service}-${selectedService.region}`;
+    setQosOptimization(prev => ({
+      ...prev,
+      [serviceKey]: !prev[serviceKey]
+    }));
+    setStatusMessage({
+      type: 'info',
+      text: `QoS optimization ${!qosOptimization[serviceKey] ? 'enabled' : 'disabled'} for ${selectedService.service} in ${selectedService.region}`
+    });
+  };
+
+  const handleResetNode = () => {
+    setResetting(true);
+    setStatusMessage({
+      type: 'warning',
+      text: `Resetting nodes for ${selectedService.service} in ${selectedService.region}...`
+    });
+
+    // Simulate node reset
+    setTimeout(() => {
+      setResetting(false);
+      setStatusMessage({
+        type: 'success',
+        text: `Nodes successfully reset for ${selectedService.service} in ${selectedService.region}`
+      });
+    }, 3000);
+  };
+
   const chartOptions = {
     responsive: true,
     plugins: {
@@ -126,10 +206,14 @@ function App() {
       <Row>
         <Col>
           <h2 className="mb-4">Meta Network Monitor</h2>
+          {statusMessage && (
+            <Alert variant={statusMessage.type} dismissible onClose={() => setStatusMessage(null)}>
+              {statusMessage.text}
+            </Alert>
+          )}
         </Col>
       </Row>
 
-      {/* Network Traffic Analysis */}
       <Row className="mb-4">
         <Col>
           <Card>
@@ -143,43 +227,6 @@ function App() {
         </Col>
       </Row>
 
-      {/* Network Statistics */}
-      <Row className="mb-4">
-        <Col md={3}>
-          <Card className="text-center h-100">
-            <Card.Body>
-              <h3 className="text-primary">789.5 Gbps</h3>
-              <Card.Text>Current Traffic</Card.Text>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col md={3}>
-          <Card className="text-center h-100">
-            <Card.Body>
-              <h3 className="text-success">35ms</h3>
-              <Card.Text>Average Latency</Card.Text>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col md={3}>
-          <Card className="text-center h-100">
-            <Card.Body>
-              <h3 className="text-warning">0.8%</h3>
-              <Card.Text>Error Rate</Card.Text>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col md={3}>
-          <Card className="text-center h-100">
-            <Card.Body>
-              <h3 className="text-info">156/175</h3>
-              <Card.Text>Active Nodes</Card.Text>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Services Health */}
       <Row className="mb-4">
         <Col>
           <Card>
@@ -203,11 +250,15 @@ function App() {
                     <tr key={service}>
                       <td className="fw-bold">{service}</td>
                       {regions.map(region => {
-                        const score = healthData[service]?.[region] || 0;
+                        const { healthScore } = healthData[service]?.[region] || {};
                         return (
                           <td key={region} className="text-center">
-                            <span className={`badge bg-${getHealthColor(score)}`} style={{ width: '4rem' }}>
-                              {score.toFixed(1)}%
+                            <span
+                              className={`badge bg-${getHealthColor(healthScore)}`}
+                              style={{ width: '4rem', cursor: 'pointer' }}
+                              onClick={() => handleShowDetails(service, region)}
+                            >
+                              {healthScore ? healthScore.toFixed(1) : 'N/A'}%
                             </span>
                           </td>
                         );
@@ -221,71 +272,56 @@ function App() {
         </Col>
       </Row>
 
-      {/* Infrastructure & Security */}
-      <Row>
-        <Col md={6} className="mb-3">
-          <Card className="h-100">
-            <Card.Header>
-              <h5 className="mb-0">Infrastructure Status</h5>
-            </Card.Header>
-            <Card.Body>
-              <Row>
-                <Col sm={6}>
-                  <div className="mb-3">
-                    <div className="text-muted">Total Edge Locations</div>
-                    <div className="h5">175</div>
-                  </div>
-                  <div className="mb-3">
-                    <div className="text-muted">Active CDN Nodes</div>
-                    <div className="h5">156/175</div>
-                  </div>
-                </Col>
-                <Col sm={6}>
-                  <div className="mb-3">
-                    <div className="text-muted">Global Health Score</div>
-                    <div className="h5">94.8%</div>
-                  </div>
-                  <div className="mb-3">
-                    <div className="text-muted">Network Utilization</div>
-                    <div className="h5">78.5%</div>
-                  </div>
-                </Col>
-              </Row>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col md={6} className="mb-3">
-          <Card className="h-100">
-            <Card.Header>
-              <h5 className="mb-0">Security Status</h5>
-            </Card.Header>
-            <Card.Body>
-              <Row>
-                <Col sm={6}>
-                  <div className="mb-3">
-                    <div className="text-muted">DDoS Protection</div>
-                    <div className="h5 text-success">Active</div>
-                  </div>
-                  <div className="mb-3">
-                    <div className="text-muted">SSL/TLS Status</div>
-                    <div className="h5 text-success">Optimal</div>
-                  </div>
-                </Col>
-                <Col sm={6}>
-                  <div className="mb-3">
-                    <div className="text-muted">Threat Level</div>
-                    <div className="h5 text-success">Low</div>
-                  </div>
-                  <div className="mb-3">
-                    <div className="text-muted">Failed Login Attempts</div>
-                    <div className="h5">23 <small className="text-muted">/hr</small></div>
-                  </div>
-                </Col>
-              </Row>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
+      <Modal show={modalShow} onHide={() => setModalShow(false)} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>{selectedService?.service} - {selectedService?.region}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Row className="mb-4">
+            <Col md={6}>
+              <h6>Performance Metrics</h6>
+              <div><strong>Health Score:</strong> {selectedService?.healthScore?.toFixed(1)}%</div>
+              <div><strong>Traffic:</strong> {selectedService?.traffic?.toFixed(1)} Gbps</div>
+              <div><strong>Latency:</strong> {selectedService?.latency?.toFixed(1)} ms</div>
+              <div><strong>Error Rate:</strong> {selectedService?.errorRate?.toFixed(1)}%</div>
+              <div><strong>Active Nodes:</strong> {selectedService?.activeNodes}</div>
+            </Col>
+            <Col md={6}>
+              <h6>Optimization Controls</h6>
+              <Form>
+                <Form.Check 
+                  type="switch"
+                  id="hw-acceleration"
+                  label="Hardware Acceleration"
+                  checked={hwAcceleration[`${selectedService?.service}-${selectedService?.region}`] || false}
+                  onChange={toggleHwAcceleration}
+                  className="mb-2"
+                />
+                <Form.Check 
+                  type="switch"
+                  id="qos-optimization"
+                  label="QoS Optimization"
+                  checked={qosOptimization[`${selectedService?.service}-${selectedService?.region}`] || false}
+                  onChange={toggleQosOptimization}
+                  className="mb-3"
+                />
+                <Button 
+                  variant="warning"
+                  onClick={handleResetNode}
+                  disabled={resetting}
+                >
+                  {resetting ? 'Resetting Nodes...' : 'Reset Interactive Nodes'}
+                </Button>
+              </Form>
+            </Col>
+          </Row>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setModalShow(false)}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </Container>
   );
 }
